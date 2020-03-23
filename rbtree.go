@@ -86,6 +86,12 @@ func (root *Tree) NegativeLimit() Iterator {
 	return Iterator{root, negativeLimitNode}
 }
 
+// Find exact iterator of key
+// if not exist, return root.Limit()
+func (root *Tree) Find(key Item) Iterator {
+	return Iterator{root, root.find(key)}
+}
+
 // Find the smallest element N such that N >= key, and return the
 // iterator pointing to the element. If no such element is found,
 // return root.Limit().
@@ -109,6 +115,19 @@ func (root *Tree) FindLE(key Item) Iterator {
 		return Iterator{root, negativeLimitNode}
 	}
 	return Iterator{root, root.maxNode}
+}
+
+// if item exists, update it to the NEW one, and return the OLD one
+// if not, insert it
+func (root *Tree) Upsert(item Item) Item {
+	n, exact := root.findGE(item)
+	if !exact {
+		root.Insert(item)
+		return nil
+	}
+	var old Item
+	old, n.item = n.item, item
+	return old
 }
 
 func getGU(n *node) (grandparent, uncle *node) {
@@ -469,6 +488,24 @@ func (root *Tree) doInsert(item Item) *node {
 		}
 	}
 	panic("should not reach here")
+}
+
+func (root *Tree) find(key Item) *node {
+	n := root.root
+	for true {
+		if n == nil {
+			return nil
+		}
+		comp := root.compare(key, n.item)
+		if comp == 0 {
+			return n
+		} else if comp < 0 {
+			n = n.left
+		} else {
+			n = n.right
+		}
+	}
+	return nil
 }
 
 // Find a node whose item >= key. The 2nd return value is true iff the
