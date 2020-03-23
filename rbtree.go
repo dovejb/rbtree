@@ -12,6 +12,7 @@ package rbtree
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 var verb bool
@@ -27,6 +28,7 @@ type Item interface{}
 type CompareFunc func(a, b Item) int
 
 type Tree struct {
+	sync.RWMutex
 	// Root of the tree
 	root *node
 
@@ -51,6 +53,8 @@ func (root *Tree) Len() int {
 // A convenience function for finding an element equal to key. Return
 // nil if not found.
 func (root *Tree) Get(key Item) Item {
+	root.RLock()
+	defer root.RUnlock()
 	n, exact := root.findGE(key)
 	if exact {
 		return n.item
@@ -89,6 +93,8 @@ func (root *Tree) NegativeLimit() Iterator {
 // Find exact iterator of key
 // if not exist, return root.Limit()
 func (root *Tree) Find(key Item) Iterator {
+	root.RLock()
+	defer root.RUnlock()
 	return Iterator{root, root.find(key)}
 }
 
@@ -96,6 +102,8 @@ func (root *Tree) Find(key Item) Iterator {
 // iterator pointing to the element. If no such element is found,
 // return root.Limit().
 func (root *Tree) FindGE(key Item) Iterator {
+	root.RLock()
+	defer root.RUnlock()
 	n, _ := root.findGE(key)
 	return Iterator{root, n}
 }
@@ -104,6 +112,8 @@ func (root *Tree) FindGE(key Item) Iterator {
 // iterator pointing to the element. If no such element is found,
 // return iter.NegativeLimit().
 func (root *Tree) FindLE(key Item) Iterator {
+	root.RLock()
+	defer root.RUnlock()
 	n, exact := root.findGE(key)
 	if exact {
 		return Iterator{root, n}
@@ -120,7 +130,9 @@ func (root *Tree) FindLE(key Item) Iterator {
 // if item exists, update it to the NEW one, and return the OLD one
 // if not, insert it
 func (root *Tree) Upsert(item Item) Item {
+	root.RLock()
 	n, exact := root.findGE(item)
+	root.RUnlock()
 	if !exact {
 		root.Insert(item)
 		return nil
@@ -143,7 +155,8 @@ func getGU(n *node) (grandparent, uncle *node) {
 // Insert an item. If the item is already in the tree, do nothing and
 // return false. Else return true.
 func (root *Tree) Insert(item Item) bool {
-
+	root.Lock()
+	defer root.Unlock()
 	// TODO: delay creating n until it is found to be inserted
 	n := root.doInsert(item)
 	if n == nil {
@@ -215,7 +228,9 @@ func (root *Tree) Insert(item Item) bool {
 // Delete an item with the given key. Return true iff the item was
 // found.
 func (root *Tree) DeleteWithKey(key Item) bool {
+	root.RLock()
 	n, exact := root.findGE(key)
+	root.RUnlock()
 	if exact {
 		root.doDelete(n)
 		return true
@@ -289,6 +304,8 @@ func (iter Iterator) Next() Iterator {
 	if iter.NegativeLimit() {
 		return Iterator{iter.root, iter.root.minNode}
 	}
+	iter.root.RLock()
+	defer iter.root.RUnlock()
 	return Iterator{iter.root, iter.node.doNext()}
 }
 
@@ -298,6 +315,8 @@ func (iter Iterator) Next() Iterator {
 // REQUIRES: !iter.NegativeLimit()
 func (iter Iterator) Prev() Iterator {
 	doAssert(!iter.NegativeLimit())
+	iter.root.RLock()
+	defer iter.root.RUnlock()
 	if !iter.Limit() {
 		return Iterator{iter.root, iter.node.doPrev()}
 	}
@@ -545,6 +564,8 @@ func (root *Tree) findGE(key Item) (*node, bool) {
 
 // Delete N from the tree.
 func (root *Tree) doDelete(n *node) {
+	root.Lock()
+	defer root.Unlock()
 	if n.myTree != nil && n.myTree != root {
 		panic(fmt.Sprintf("delete applied to node that was not from our tree... n has tree: '%s'\n\n while root has tree: '%s'\n\n", n.myTree.DumpAsString(), root.DumpAsString()))
 	}
