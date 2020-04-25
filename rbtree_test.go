@@ -9,6 +9,7 @@ import "math/rand"
 import "fmt"
 import "log"
 import "sort"
+import "sync"
 
 const testVerbose = false
 
@@ -81,7 +82,9 @@ func TestDelete(t *testing.T) {
 func iterToString(i Iterator) string {
 	s := ""
 	for ; !i.Limit(); i = i.Next() {
-		if s != "" { s = s + ","}
+		if s != "" {
+			s = s + ","
+		}
 		s = s + fmt.Sprintf("%d", i.Item().(int))
 	}
 	return s
@@ -90,7 +93,9 @@ func iterToString(i Iterator) string {
 func reverseIterToString(i Iterator) string {
 	s := ""
 	for ; !i.NegativeLimit(); i = i.Prev() {
-		if s != "" { s = s + ","}
+		if s != "" {
+			s = s + ","
+		}
 		s = s + fmt.Sprintf("%d", i.Item().(int))
 	}
 	return s
@@ -233,7 +238,7 @@ func (oiter oracleIterator) NegativeLimit() bool {
 }
 
 func (oiter oracleIterator) Max() bool {
-	return oiter.index == len(oiter.o.data) - 1
+	return oiter.index == len(oiter.o.data)-1
 }
 
 func (oiter oracleIterator) Item() int {
@@ -375,4 +380,35 @@ func ExampleIntString() {
 	// Get(10) -> {10 value10}
 	// Get(11) -> <nil>
 	// FindGE(11) -> {12 value12}
+}
+func BenchmarkInsert(b *testing.B) {
+	sl := NewTree(func(a, b Item) int {
+		return a.(int) - b.(int)
+	})
+	for i := 0; i < b.N; i++ {
+		sl.Insert(i)
+	}
+}
+func BenchmarkRbtree(b *testing.B) {
+	b.StopTimer()
+	M := 1000000
+	sl := NewTree(func(a, b Item) int {
+		return a.(int) - b.(int)
+	})
+	for i := 0; i < M; i++ {
+		sl.Insert(i)
+	}
+	var wg sync.WaitGroup
+	b.StartTimer()
+	for thread := 0; thread < 1; thread++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < b.N; i++ {
+				sl.DeleteWithKey(rand.Intn(M))
+				sl.Insert(rand.Intn(M))
+			}
+		}()
+	}
+	wg.Wait()
 }
